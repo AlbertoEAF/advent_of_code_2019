@@ -1,6 +1,16 @@
-(ql:quickload "cl-interpol")
-;; helpers
-(cl-interpol:enable-interpol-syntax)
+(in-package :cl-user)
+(defpackage :aoc19-d5
+  (:use :cl)
+  (:nicknames aoc-5)
+  (:export
+   #:compute
+   #:register-op
+   #:read-program))
+(in-package :aoc19-d5)
+
+;;;; helpers
+;;(ql:quickload "cl-interpol")
+;;(cl-interpol:enable-interpol-syntax)
 
 (defun read-program ()
   "Reads the program from disk as a list of integers"
@@ -11,42 +21,24 @@
 
 (defparameter *program* (read-program))
 
-#|
-This program supports the following opcodes:
-
-01 a b c : {@a + @b} -> @c
-02 a b c : {@a + @b} -> @c
-03 a     : (input) -> @a
-04 a     : (output @a)
-99       : stop
-
-And parameter modes (binary opcode prefix):
-
-# Parameter modes read from right-to-left:
-
-- Parameter Mode 0 : Position mode (00)
-   Each parameter is an address
-
-- Parameter Mode 1 : Immediate mode
-   Each parameter is a value
-
-|#
-
 (defparameter *ops* (make-hash-table)
   "Stores the possible ops")
 
 (defstruct op
+  "output-arg will serve to override program-mode -> immediate mode for any   write argument."
   opcode
   n-args
-  fn)
+  fn
+  (output-arg -1))
 
 
 
-(defun register-op (opcode n-args fn)
+(defun register-op (opcode n-args fn &key (output-arg -1))
   (setf (gethash opcode *ops*)
         (make-op :opcode opcode
                  :n-args n-args
-                 :fn fn)))
+                 :fn fn
+                 :output-arg output-arg)))
 
 (defun mem/r (memory address)
   (elt memory address))
@@ -56,24 +48,60 @@ And parameter modes (binary opcode prefix):
   (setf (elt memory address) value)
   nil)
 
+;; sum
 (register-op 1 3
              (lambda (mem a b o)
-               (mem/w mem o (+ a b))))
+               (mem/w mem o (+ a b)))
+             :output-arg 3)
 
+;; multiply
 (register-op 2 3
              (lambda (mem a b o)
-               (mem/w mem o (* a b))))
+               (mem/w mem o (* a b)))
+             :output-arg 3)
 
+;; input
 (register-op 3 1
              (lambda (mem o)
+               (print mem)
                (format *query-io* "Program input:")
                (finish-output *query-io*)
-               (mem/w mem o (parse-integer (read-line)))))
+               (mem/w mem o (parse-integer (read-line))))
+             :output-arg 1)
 
+;; output
 (register-op 4 1
              (lambda (mem o)
                (declare (ignore mem))
                o))
+
+;; jump-if-true
+(register-op 5 2
+             (lambda (mem a b)
+               (declare (ignore mem))
+               (when (/= 0 a)
+                 (list :JUMP b))))
+
+;; jump-if-false
+(register-op 6 2
+             (lambda (mem a b)
+               (declare (ignore mem))
+               (when (= 0 a)
+                 (list :JUMP b))))
+
+;; less-than
+(register-op 7 3
+             (lambda (mem a b o)
+               (mem/w mem o
+                      (if (< a b) 1 0)))
+             :output-arg 3)
+
+;; equals
+(register-op 8 3
+             (lambda (mem a b o)
+               (mem/w mem o
+                      (if (= a b) 1 0)))
+             :output-arg 3)
 
 (register-op 99 0
              (lambda (mem)
@@ -111,36 +139,52 @@ And parameter modes (binary opcode prefix):
   (fetch-value mem (fetch-value mem idx)))
 
 (defun parse-op-params (mem idx instruction op)
+  "Given that write operations are effectively performed as if in
+  immediate mode, even if in the instructions it says it'll never
+  be specified like that, we 'override' that choice in case
+  it is an output arg."
   (let* ((n-args (op-n-args op))
-         (modes  (instruction-modes instruction n-args)))
-    (print (subseq mem (1+ idx) (+ idx 1 n-args)))
-    (print modes)
+         (modes  (instruction-modes instruction n-args))
+         (output-arg (op-output-arg op)))
+    (format t "~%parse: ~A -> mode: ~A"
+            (subseq mem idx (+ idx 1 n-args))
+            modes)
     (loop
        for mode in modes
        for i from 1 to n-args
-       collect (if mode (fetch-value mem (+ i idx))
-                        (fetch-addr  mem (+ i idx))))))
-                               
+       collect (if (or mode (= i output-arg))
+                   (fetch-value mem (+ i idx))
+                   (fetch-addr  mem (+ i idx))))))
 
-(defun test (program)
+
+(defun compute (program)
+  (format t "Executing program ~A with size ~A." program (length program))
   (loop
-     for i = 0 then (1+ i)
-     while (< i (length program))
-     collecting
+     with outputs
+     for i below (length program)
+     do
        (let* ((instruction (mem/r program i))
               (opcode (instruction-opcode instruction))
               (op     (fetch-op opcode))
               (args   (parse-op-params program i instruction op))
-              (lol (format t "~% ~S~S ~%" opcode args))
-              (n-args (op-n-args op))
               (output (apply (op-fn op) (cons program args))))
-         (if (eql output :EXIT)
-             (break))
-         ;(print (list (subseq program i) output))
-         (incf i n-args))))
+         (format t " ->> ~S >>> ~A~%" (cons opcode args) output)
+         (typecase output
+           (SYMBOL (when (eql output :EXIT)
+                     (loop-finish)))
+           (CONS (when (eql (first output) :JUMP)
+                   (setf i (second output))))
+           (INTEGER (push output outputs)))
+         (incf i (op-n-args op)))
+     finally
+       (format t "Computed: ~A~%" outputs)
+       (finish-output *query-io*)
+       (finish-output)
+       (return (reverse outputs))))
 
-(test '(3 1 1 2 5 4 99))
+(defparameter *test-out*
+  (compute '(
+             4 0 ;;1 2 5 4
+             99)))
 
-(test (read-program))
-
-(test '(1101 100 -1 4 0))
+;(run (read-program))
