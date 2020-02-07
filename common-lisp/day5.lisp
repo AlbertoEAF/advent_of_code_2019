@@ -1,16 +1,18 @@
 (in-package :cl-user)
 (defpackage :aoc19-d5
-  (:use :cl)
+  (:use :cl
+        :aoc19-utils
+        :cl-interpol)
   (:nicknames aoc-5)
   (:export
    #:compute
    #:register-op
-   #:read-program))
+   #:read-program
+   #:mem/r
+   #:mem/w))
 (in-package :aoc19-d5)
 
-;;;; helpers
-;;(ql:quickload "cl-interpol")
-;;(cl-interpol:enable-interpol-syntax)
+;(cl-interpol:enable-interpol-syntax)
 
 (defun read-program ()
   "Reads the program from disk as a list of integers"
@@ -169,22 +171,32 @@
               (args   (parse-op-params program i instruction op))
               (output (apply (op-fn op) (cons program args))))
          (format t " ->> ~S >>> ~A~%" (cons opcode args) output)
+         (incf i (op-n-args op))
          (typecase output
            (SYMBOL (when (eql output :EXIT)
                      (loop-finish)))
            (CONS (when (eql (first output) :JUMP)
-                   (setf i (second output))))
-           (INTEGER (push output outputs)))
-         (incf i (op-n-args op)))
+                   (setf i (1- (second output)))))
+           (INTEGER (push output outputs))))
      finally
        (format t "Computed: ~A~%" outputs)
        (finish-output *query-io*)
        (finish-output)
        (return (reverse outputs))))
 
-(defparameter *test-out*
-  (compute '(
-             4 0 ;;1 2 5 4
-             99)))
-
-;(run (read-program))
+#| test for jump: case input:
+ == 0 => print 42
+ /= 0 => print input
+|#
+#|
+(defparameter *test-jump-on-input*
+  (compute
+   '(
+     3 3                        ; input test value -> store at :test-placeholder
+     1105 :test-placeholder 8   ; if test-placeholder value != 0: jump & print test value; else proceed
+     104 42                     ; just print the number 42
+     99                         ; :EXIT
+     4 3                        ; (jumped) -> print test value
+     99)))  
+|#
+;(compute (read-program))
