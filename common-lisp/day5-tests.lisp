@@ -1,5 +1,4 @@
 (in-package :cl-user)
-(ql:quickload "rove")
 (defpackage aoc19-d5-tests
   (:use :cl
         :aoc19-utils
