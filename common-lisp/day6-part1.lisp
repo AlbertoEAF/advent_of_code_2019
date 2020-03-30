@@ -17,7 +17,7 @@
             (uiop:split-string line :separator ")"))
           (uiop:read-file-lines "day6.txt")))
 
-(defparameter *g* (init-graph *orbits*))
+
 
 (defun init-graph (orbits)
   (let1 g (make-graph 'graph-container :default-edge-type :directed :test #'equal)
@@ -28,6 +28,7 @@
     g))
 
 
+(defparameter *g* (init-graph *orbits*))
 
 (defun collect-children (node)
   "Only implemented for single-children!"
@@ -45,13 +46,13 @@
 (defun sum-factorial (n)
   (loop for i to n summing i))
 
-(defparameter *j* (init-graph '(
-                                (C B)
-                                (B A)
-                                (A 0)
-                                (G F)
-                                (F E)
-                                (E D))))
+;; (defparameter *j* (init-graph '(
+;;                                 (C B)
+;;                                 (B A)
+;;                                 (A O)
+;;                                 (G F)
+;;                                 (F E)
+;;                                 (E D))))
                                
 
 (defparameter *root-path-lengths*

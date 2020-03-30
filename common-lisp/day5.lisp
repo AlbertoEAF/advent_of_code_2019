@@ -14,14 +14,14 @@
 
 ;(cl-interpol:enable-interpol-syntax)
 
-(defun read-program ()
+(defun read-program (filepath)
   "Reads the program from disk as a list of integers"
   (flet ((split-to-integers (s)
            (mapcar #'parse-integer (uiop:split-string s :separator ","))))
-    (split-to-integers (uiop:read-file-string "day5.txt"))))
+    (split-to-integers (uiop:read-file-string filepath))))
 
 
-(defparameter *program* (read-program))
+(defparameter *program* (read-program "day5.txt"))
 
 (defparameter *ops* (make-hash-table)
   "Stores the possible ops")
@@ -67,8 +67,9 @@
              (lambda (mem o)
                (print mem)
                (format *query-io* "Program input:")
+               (mem/w mem o (parse-integer (read-line)))
                (finish-output *query-io*)
-               (mem/w mem o (parse-integer (read-line))))
+               nil)
              :output-arg 1)
 
 ;; output
@@ -140,6 +141,8 @@
 (defun fetch-addr (mem idx)
   (fetch-value mem (fetch-value mem idx)))
 
+(defparameter *debug-stream* nil)
+
 (defun parse-op-params (mem idx instruction op)
   "Given that write operations are effectively performed as if in
   immediate mode, even if in the instructions it says it'll never
@@ -148,7 +151,7 @@
   (let* ((n-args (op-n-args op))
          (modes  (instruction-modes instruction n-args))
          (output-arg (op-output-arg op)))
-    (format t "~%parse: ~A -> mode: ~A"
+    (format *debug-stream* "~%parse: ~A -> mode: ~A"
             (subseq mem idx (+ idx 1 n-args))
             modes)
     (loop
@@ -159,18 +162,20 @@
                    (fetch-addr  mem (+ i idx))))))
 
 
-(defun compute (program)
-  (format t "Executing program ~A with size ~A." program (length program))
+(defun compute (program &optional (debug t))
+  "If debug is nil, no prints will be performed"
+  (format debug "~%~%Executing program ~A with size ~A.~%~%" program (length program))
   (loop
      with outputs
      for i below (length program)
      do
+       (format debug "Program~%~s:" program)
        (let* ((instruction (mem/r program i))
               (opcode (instruction-opcode instruction))
               (op     (fetch-op opcode))
               (args   (parse-op-params program i instruction op))
               (output (apply (op-fn op) (cons program args))))
-         (format t " ->> ~S >>> ~A~%" (cons opcode args) output)
+         (format debug " ->> ~S >>> ~A~%" (cons opcode args) output)
          (incf i (op-n-args op))
          (typecase output
            (SYMBOL (when (eql output :EXIT)
@@ -179,7 +184,7 @@
                    (setf i (1- (second output)))))
            (INTEGER (push output outputs))))
      finally
-       (format t "Computed: ~A~%" outputs)
+       (format debug "Computed: ~A~%" outputs)
        (finish-output *query-io*)
        (finish-output)
        (return (reverse outputs))))
@@ -197,6 +202,6 @@
      104 42                     ; just print the number 42
      99                         ; :EXIT
      4 3                        ; (jumped) -> print test value
-     99)))  
+     99)))
 |#
 ;(compute (read-program))

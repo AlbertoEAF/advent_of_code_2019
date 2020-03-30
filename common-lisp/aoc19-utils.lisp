@@ -1,11 +1,12 @@
 (in-package :cl-user)
 (defpackage :aoc19-utils
-  (:use :cl)
+  (:use :cl :trivial-arguments)
   (:nicknames aoc-utils u)
   (:export #:let1
            #:alias
            #:hash-keys
-           #:has-key))
+           #:has-key
+           #:get-function-mandatory-arguments-count))
 (in-package :aoc19-utils)
 
 
@@ -23,3 +24,11 @@
   (multiple-value-bind (_ found-p)
       (gethash key hash-table)
     (return-from has-key found-p)))
+
+(defun get-function-mandatory-arguments-count (fn)
+  "Returns the number of mandatory arguments in the function."
+  (let ((function-arguments (arg:arglist fn))
+        (special-args '(&optional &key &rest)))
+    (loop for i below (length function-arguments)
+       until (find (elt function-arguments i) special-args)
+       finally (return i))))
