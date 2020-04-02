@@ -1,3 +1,5 @@
+                                        ; (asdf:load-system "aoc2019")
+
 (in-package :cl-user)
 (defpackage :aoc19-intcode
   (:use :cl
@@ -14,7 +16,7 @@
    #:mem/w))
 (in-package :aoc19-intcode)
 
-;(cl-interpol:enable-interpol-syntax)
+(cl-interpol:enable-interpol-syntax)
 
 (defun read-intcode-program (filepath)
   "Reads the program from disk as a list of integers"
@@ -43,7 +45,7 @@
         (make-op :opcode opcode
                  :n-args (aoc19-utils:get-function-mandatory-arguments-count fn)
                  :fn fn
-                 :output-arg (get-output-arg fn)
+                 :output-arg (or (get-output-arg fn) -1) ;; needs to be numerical
                  :op-name op-name)))
 
 (defun mem/r (memory address)
@@ -55,52 +57,45 @@
   nil)
 
 (register-op 1 "+"
-             (lambda (a b $out &key mem)
-               (mem/w mem $out (+ a b))))
+             (lambda (a b $out)
+               (list :WRITE $out (+ a b))))
 
 (register-op 2 "*"
-             (lambda (a b $out &key mem)
-               (mem/w mem $out (* a b))))
+             (lambda (a b $out)
+               (list :WRITE $out (* a b))))
 
 (register-op 3 "input"
-             (lambda ($out &key mem)
-               (print mem)
+             (lambda ($out)
                (format *query-io* "Program input:")
-               (mem/w mem $out (parse-integer (read-line)))
-               (finish-output *query-io*)
-               nil))
+               (let ((input-value (parse-integer (read-line))))
+                 (finish-output *query-io*)
+                 (list :WRITE $out input-value))))
 
 (register-op 4 "output"
-             (lambda (a &key mem)
-               (declare (ignore mem))
-               a))
+             (lambda (a)
+               (list :OUTPUT a)))
 
 (register-op 5 "jump-if-true"
-             (lambda (a b &key mem)
-               (declare (ignore mem))
+             (lambda (a b)
                (when (/= 0 a)
                  (list :JUMP b))))
 
 (register-op 6 "jump-if-false"
-             (lambda (a b &key mem)
-               (declare (ignore mem))
+             (lambda (a b)
                (when (= 0 a)
                  (list :JUMP b))))
 
 (register-op 7 "<"
-             (lambda (a b $out &key mem)
-               (mem/w mem $out
-                      (if (< a b) 1 0))))
+             (lambda (a b $out)
+               (list :WRITE $out (if (< a b) 1 0))))
 
 (register-op 8 "="
-             (lambda (a b $out &key mem)
-               (mem/w mem $out
-                      (if (= a b) 1 0))))
+             (lambda (a b $out)
+               (list :WRITE $out (if (= a b) 1 0))))
 
 (register-op 99 "exit"
-             (lambda (&key mem)
-               (declare (ignore mem))
-               :EXIT))
+             (lambda ()
+               (list :EXIT)))
 
 (defun fetch-op (opcode)
   (let ((op (gethash opcode *ops*)))
@@ -180,16 +175,56 @@
 (defun compile-program (program-memory &key inputs)
   "Compile a program-state object"
   (make-instance 'program-state
-                 :program-memory program-memory
+                 :program-memory (copy-list program-memory)
                  :inputs inputs))
 
 (defmethod is-done ((program-state program-state))
-  (null (pc program-state)))
+  (with-slots (pc program-memory) program-state
+    (or (null pc)
+        (= pc (length program-memory)))))
+
+(defun compute-op-output (program-memory pc &key debug-stream)
+  "Computes the output of calling op."
+  (format debug-stream "Program Memory: ~a~%" program-memory)
+  (let* ((instruction (mem/r program-memory pc))
+         (opcode (instruction-opcode instruction))
+         (op     (fetch-op opcode))
+         (args   (parse-op-params program-memory pc instruction op))
+         (pc-increment (1+ (op-n-args op))) ; Adds 1 for the opcode.
+         (op-output (apply (op-fn op) args)))
+    ;; (concatenate 'list args (list :mem program-memory)))))
+    (format debug-stream " ->> ~S >>> ~A~%"
+            (cons opcode args) op-output)
+    (values op-output pc-increment args op)))
+
+(defun exec-op-output (program-state op-output pc-increment)
+  "Applies the output of the operation to move the program interpreter state."
+  (with-slots (program-memory inputs outputs pc) program-state
+    (incf pc pc-increment)
+    (when op-output
+      (destructuring-bind (cmd &rest args) op-output
+        (case cmd
+          ;; non-halting commands
+          (:OUTPUT (push (first args) outputs))
+          (:WRITE (destructuring-bind (write-address write-value) args
+                    (mem/w program-memory write-address write-value)))
+          (:JUMP (setf pc (first args)))
+          
+          ;; all halting commands.
+          (otherwise (ecase cmd
+                       (:REWIND-OP-AND-PAUSE (decf pc pc-increment))
+                       (:PAUSE)
+                       (:EXIT (setf pc nil)))
+                     (return-from exec-op-output T)))))
+    
+    (return-from exec-op-output nil))) ; signal continuation
 
 
 (defmethod compute ((program-state program-state) &key debug-stream)
   "If debug-stream is nil, no prints will be performed
    Special keywords are:
+    :WRITE - write at memory address a particular value
+    :OUTPUT - saves a particular output
     :REWIND-OP-AND-PAUSE - jump move to the previous pc and :PAUSE
     :PAUSE - halt execution
     :EXIT - finish program (sets pc to nil)
@@ -198,31 +233,14 @@
     (format debug-stream "~%~%Executing program ~A with size ~A (pc=~s).~%~%"
             program-memory (length program-memory) pc)
     (loop
-       unless (is-done program-state)
+       until (is-done program-state)
        do
-         (format debug-stream "Program Memory: ~a~%" program-memory)
-         
-       ;; exec op
-         (let* ((instruction (mem/r program-memory pc))
-                (opcode (instruction-opcode instruction))
-                (op     (fetch-op opcode))
-                (args   (parse-op-params program-memory pc instruction op))
-                (op-output (apply (op-fn op) (concatenate 'list args (list :mem program-memory))))
-                (num-parsed-addresses (1+ (op-n-args op)))) ; take the opcode itself into account.
-           (format debug-stream " ->> ~S >>> ~A~%" (cons opcode args) op-output)
-           
-           ;; update pc & outputs on op-output
-           (incf pc num-parsed-addresses)
-           (typecase op-output
-             (NULL)
-             (SYMBOL (ecase op-output
-                       (:REWIND-OP-AND-PAUSE (decf pc num-parsed-addresses))
-                       (:PAUSE)
-                       (:EXIT (setf pc nil)))
-                     (loop-finish))
-             (CONS (when (eql (first op-output) :JUMP)
-                     (setf pc (second op-output))))
-             (INTEGER (push op-output outputs))))
+         (multiple-value-bind (op-output pc-increment)
+             (compute-op-output program-memory pc :debug-stream debug-stream)
+           (when (exec-op-output program-state op-output pc-increment)
+             (loop-finish)))
        finally
          (format debug-stream "Computed: ~A~%" outputs)
          (return (reverse outputs)))))
+
+

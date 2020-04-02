@@ -21,20 +21,19 @@
 
 (defparameter *debug-stream* nil)
 
-(defun op3-input-op-phase-or-input (mem o)
+(defun op3-input-op-phase-or-input ($out)
   (let ((value
          (if (evenp *op3-calls*) (elt *op3-phase-params* (/ *op3-calls* 2))
             *amplifier-input*)))
-    (mem/w mem o value)
     (format *debug-stream* "~%~% [ Op3 fetching input value ~s (phase-input=~s) ]~%" value (evenp *op3-calls*))
     (register-op3-call)
-    nil))
+    (list :WRITE $out value)))
+    
 
 
 
-(register-op 3 1
-             #'op3-input-op-phase-or-input
-             :output-arg 1)
+(register-op 3 "op-3-input-op-phase-or-input"
+             #'op3-input-op-phase-or-input)
 
 
                                         ; Program start
@@ -69,7 +68,7 @@
      for amplifier-index below 5
      do
        (setf *amplifier-input*
-             (elt (compute (compile-program (copy-list *program*)) nil) 0)))
+             (elt (compute (compile-program (copy-list *program*)) :debug-stream t) 0)))
 
   (push (cons (copy-seq *op3-phase-params*) *amplifier-input*)
         *outputs*))
