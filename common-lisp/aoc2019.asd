@@ -1,5 +1,6 @@
 (defsystem "aoc2019"
-  :depends-on ("cl-interpol" "cl-graph" "readable" "trivial-arguments")
+  :depends-on ("cl-interpol" "cl-graph" "readable" "trivial-arguments"
+                             "queues")
   :components ((:file "aoc19-utils")
                (:file "day5")
                (:file "day6-part1")

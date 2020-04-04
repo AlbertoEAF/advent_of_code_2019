@@ -5,7 +5,8 @@
   (:use :cl
         :aoc19-utils
         :cl-interpol
-        :trivial-arguments)
+        :trivial-arguments
+        :queues)
   (:nicknames aoc-intcode)
   (:export
    #:compile-program
@@ -13,7 +14,9 @@
    #:register-op
    #:read-intcode-program
    #:mem/r
-   #:mem/w))
+   #:mem/w
+   #:inputs
+   #:outputs))
 (in-package :aoc19-intcode)
 
 (cl-interpol:enable-interpol-syntax)
@@ -39,7 +42,7 @@
 
 (defun get-output-arg (fn)
  "Retrieves the output argument position."
- (position '$OUT (arg:arglist fn)))
+ (position '$OUT (arg:arglist fn) :test #'string=))
 
 (defun fn-requires-inputs (fn)
   "If it has a key argument called inputs"
@@ -158,10 +161,11 @@
                           collect (if (or immediate-mode-p (= arg-idx output-arg))
                                       (fetch-value mem (+ arg-idx pc 1))
                                       (fetch-addr  mem (+ arg-idx pc 1))))))
-    (format *debug-stream* "~%parse-op-params: ~A -> op(~A) mode: ~A -> ~A"
+    (format *debug-stream* "~%parse-op-params: ~A -> op(~A) mode: ~A w/=~A -> ~A"
             (subseq mem pc (+ pc 1 n-args))
             (op-op-name op)
             modes
+            output-arg
             param-values)
     param-values))
 
@@ -175,11 +179,11 @@
    (inputs
     :initarg :inputs
     :accessor inputs
-    :initform nil)
+    :initform (queues:make-queue :simple-queue))
    (outputs
     :initarg :outputs
     :accessor outputs
-    :initform nil)
+    :initform (queues:make-queue :simple-queue))
    (pc
     :documentation "Program counter. nil when execution finishes."
     :initarg :pc
@@ -187,11 +191,11 @@
     :initform 0))
   (:documentation "Holds an intcode program state."))
 
-(defun compile-program (program-memory &key inputs)
+(defun compile-program (program-memory)
   "Compile a program-state object"
   (make-instance 'program-state
-                 :program-memory (copy-list program-memory)
-                 :inputs inputs))
+                 :program-memory (make-array (length program-memory)
+                                             :initial-contents program-memory)))
 
 (defmethod is-done ((program-state program-state))
   (with-slots (pc program-memory) program-state
@@ -222,7 +226,7 @@
       (destructuring-bind (cmd &rest args) op-output
         (case cmd
           ;; non-halting commands
-          (:OUTPUT (push (first args) outputs))
+          (:OUTPUT (qpush outputs (first args)))
           (:WRITE (destructuring-bind (write-address write-value) args
                     (mem/w program-memory write-address write-value)))
           (:JUMP (setf pc (first args)))
@@ -258,4 +262,4 @@
              (loop-finish)))
        finally
          (format debug-stream "Computed: ~A~%" outputs)
-         (return (reverse outputs)))))
+         (return outputs))))
