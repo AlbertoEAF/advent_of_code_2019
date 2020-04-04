@@ -34,19 +34,34 @@
   n-args
   fn
   output-arg
-  op-name)
+  op-name
+  requires-inputs)
 
 (defun get-output-arg (fn)
  "Retrieves the output argument position."
  (position '$OUT (arg:arglist fn)))
 
+(defun fn-requires-inputs (fn)
+  "If it has a key argument called inputs"
+  (let* ((args (arg:arglist fn)))
+    (position '$inputs args
+              :test #'string=
+              :start (or (position '&key args)
+                         (length args)))))
+
+
 (defun register-op (opcode op-name fn)
+  "The function can take as many arguments as needed, but:
+   - $out is handled specially (interpreted as output address argument)
+   - &key $inputs (optionally, if defined, the program inputs will be passed in).
+  "
   (setf (gethash opcode *ops*)
         (make-op :opcode opcode
                  :n-args (aoc19-utils:get-function-mandatory-arguments-count fn)
                  :fn fn
                  :output-arg (or (get-output-arg fn) -1) ;; needs to be numerical
-                 :op-name op-name)))
+                 :op-name op-name
+                 :requires-inputs (fn-requires-inputs fn))))
 
 (defun mem/r (memory address)
   (elt memory address))
@@ -149,7 +164,7 @@
             modes
             param-values)
     param-values))
-  
+
 
 
 
@@ -183,7 +198,7 @@
     (or (null pc)
         (= pc (length program-memory)))))
 
-(defun compute-op-output (program-memory pc &key debug-stream)
+(defun compute-op-output (program-memory pc inputs &key debug-stream)
   "Computes the output of calling op."
   (format debug-stream "Program Memory: ~a~%" program-memory)
   (let* ((instruction (mem/r program-memory pc))
@@ -191,7 +206,9 @@
          (op     (fetch-op opcode))
          (args   (parse-op-params program-memory pc instruction op))
          (pc-increment (1+ (op-n-args op))) ; Adds 1 for the opcode.
-         (op-output (apply (op-fn op) args)))
+         (op-output (apply (op-fn op) (append args ; If needed pass extra-args.
+                                              (if (op-requires-inputs op)
+                                                  (list :$inputs inputs))))))
     ;; (concatenate 'list args (list :mem program-memory)))))
     (format debug-stream " ->> ~S >>> ~A~%"
             (cons opcode args) op-output)
@@ -209,14 +226,14 @@
           (:WRITE (destructuring-bind (write-address write-value) args
                     (mem/w program-memory write-address write-value)))
           (:JUMP (setf pc (first args)))
-          
+
           ;; all halting commands.
           (otherwise (ecase cmd
                        (:REWIND-OP-AND-PAUSE (decf pc pc-increment))
                        (:PAUSE)
                        (:EXIT (setf pc nil)))
                      (return-from exec-op-output T)))))
-    
+
     (return-from exec-op-output nil))) ; signal continuation
 
 
@@ -236,11 +253,9 @@
        until (is-done program-state)
        do
          (multiple-value-bind (op-output pc-increment)
-             (compute-op-output program-memory pc :debug-stream debug-stream)
+             (compute-op-output program-memory pc inputs :debug-stream debug-stream)
            (when (exec-op-output program-state op-output pc-increment)
              (loop-finish)))
        finally
          (format debug-stream "Computed: ~A~%" outputs)
          (return (reverse outputs)))))
-
-
