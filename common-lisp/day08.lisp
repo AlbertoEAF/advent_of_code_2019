@@ -3,13 +3,15 @@
   (:use :cl
         :aoc19-utils
         :cl-graph
-        :aoc19-intcode
-        :queues))
+        :queues
+        :log4cl))
 (in-package :aoc19-d8)
 
 (defparameter *digits-string* (uiop:read-file-string "day08.txt"))
 
 (defparameter shape '(25 6))
+
+(log:config :debug)
 
 (defun read-file-into-layers (filepath layer-w layer-h)
   (with-open-file (stream filepath)
@@ -23,7 +25,8 @@
                                i 0))
       (setf (aref layer i) (digit-char-p char))
       (incf i)
-      (when (= i layer-size) (progn (push layers layer)
+      (when (= i layer-size) (progn (push layer layers)
                                     (setf layer nil
                                           i 0))))))
       
+(defparameter *layers* (aoc19-d8::READ-file-into-layers "day08.txt" 25 6))
