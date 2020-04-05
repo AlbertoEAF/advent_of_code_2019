@@ -1,12 +1,12 @@
-(defsystem "aoc2019"
+(defsystem "aoc19"
   :depends-on ("cl-interpol" "cl-graph" "readable" "trivial-arguments"
                              "queues")
   :components ((:file "aoc19-utils")
-               (:file "day5")
-               (:file "day6-part1")
+               (:file "day05")
+               (:file "day06-part1")
                (:file "intcode")))
 
 
-(defsystem "aoc2019/tests"
-  :depends-on ("aoc2019" "rove")
-  :components ((:file "day5-tests")))
+(defsystem "aoc19/tests"
+  :depends-on ("aoc19" "rove")
+  :components ((:file "day05-tests")))
