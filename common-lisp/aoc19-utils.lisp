@@ -6,7 +6,8 @@
            #:alias
            #:hash-keys
            #:has-key
-           #:get-function-mandatory-arguments-count))
+           #:get-function-mandatory-arguments-count
+           #:find-best))
 (in-package :aoc19-utils)
 
 
@@ -32,3 +33,16 @@
     (loop for i below (length function-arguments)
        until (find (elt function-arguments i) special-args)
        finally (return i))))
+
+
+(defun find-best (list &key (key #'identity) (test #'<))
+  (when list
+    (do* ((best     (car list))
+          (best-key (funcall key best))
+          (rest     (cdr list) (cdr rest)))
+         ((null rest) best)
+      (let* ((current (car rest))
+             (current-key (funcall key current)))
+        (when (funcall test current-key best-key)
+          (setf best current
+                best-key current-key))))))
