@@ -145,7 +145,7 @@
 (defun fetch-addr (mem pc)
   (fetch-value mem (fetch-value mem pc)))
 
-(defparameter *debug-stream* t)
+(defparameter *debug-stream* nil)
 
 (defun parse-op-params (mem pc instruction op)
   "Given that write operations are effectively performed as if in
