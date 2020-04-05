@@ -7,9 +7,14 @@
         :queues)) ; d5 provides the intcode computer code
 (in-package :aoc19-d7)
 
-(defparameter *debug-stream* nil)
-
 (require :queues.simple-queue)
+
+(ql:quickload "readable")
+(readable:enable-sweet)
+(defun readable:$bracket-apply$ (X at)
+  (elt X at))
+
+(defparameter *debug-stream* nil)
 
 (register-op
  3 "op-3-input-op-phase-or-input"
@@ -21,23 +26,21 @@
 
                                         ; Program start
 
-(defun inc-vector-array (array base)
-  "Used to increment an array whose items act like the digits of base."
-  (loop for idx downfrom (1- (length array)) to 0
-     while (zerop
-            (setf (elt array idx)
-                  (mod (1+ (elt array idx)) base)))
-     finally
-       (return array)))
+(defun inc-digits (array start end)
+  "Used to increment an array whose items act like the digits of base (end-start) with offset +start."
+  (loop
+     for idx downfrom (1- (length array)) to 0 ; From least significative.
+     do ; increment
+       (if (= (1- end) (elt array idx))
+           (setf (elt array idx) start)
+           (setf (elt array idx) (1+ (elt array idx))))
+     until (/= start (elt array idx))) ; until we reach a digit that didn't need carry over.
+  array)
 
 (defun unique-values-p (input-vector)
  "If there isn't any repeated element."
  (= (length input-vector)
     (length (remove-duplicates input-vector))))
-
-(defun inc-phase (phase)
-  "Increment phase vector with elements in modulo 5."
-  (inc-vector-array phase 5))
 
 (defparameter *program* '(3 15 3 16 1002 16 10 16 1 16 15 15 4 15 99 0 0))
 
@@ -45,19 +48,27 @@
 
 (defparameter *program* '(3 31 3 32 1002 32 10 32 1001 31 -2 31 1007 31 0 33 1002 33 7 33 1 33 31 31 1 32 31 31 4 31 99 0 0 0))
 
-(defun setup-amplifier-chain (program-memory phase-values)
-  (let ((amps (loop for i below 5 collecting
-                   (compile-program program-memory))))
-    (loop for i below 5
-       do
-         ;; set phase
-         (qpush (inputs (elt amps i)) (elt phase-values i))
-         ;; assign outputs of prev to next program's inputs
-         (when (plusp i) (setf (outputs (elt amps (1- i)))
-                               (inputs  (elt amps i))))
-       finally
-         (qpush (inputs (first amps)) 0)
-         (return amps))))
+(defun link-amps (amps from to)
+  (setf (outputs (elt amps from))
+        (inputs (elt amps to))))
+
+(defun set-amp-phase (amp phase-param)
+  (qpush (inputs amp) phase-param))
+
+(defun setup-amplifier-chain (program-memory phase &key feedback)
+  (let ((amps (make-array 5)))
+    (dotimes (i 5)
+      ;; Initialize single amplifier with phase
+      (setf (elt amps i) (compile-program program-memory))
+      (set-amp-phase (elt amps i) (elt phase i))
+      ;; assign outputs of prev to next program's inputs
+      (when (plusp i)
+        (link-amps amps (1- i) i)))
+    (when feedback
+      (link-amps amps 4 0))
+    ;; Set phase 0 for the first amp
+    (qpush (inputs (elt amps 0)) 0)
+    amps))
 
 (defparameter *outputs* nil)
 
@@ -66,14 +77,25 @@
 (defun amps-output (amps)
   (qpop (outputs (elt amps 4))))
 
-(defun compute-best-amplifier-configuration (program)
-  (let ((outputs nil) (phase (vector 0 0 0 0 0)))
-    (loop for i below (expt 5 5)
+(defun all-amps-done (amps)
+  (loop for amp across amps always (aoc-intcode::is-done amp)))
+
+(defun compute-best-amplifier-configuration (program phase-start phase-end &key feedback)
+  (let ((outputs nil)
+        (phase (make-array 5 :initial-element phase-start))
+        (phase-range (- phase-end phase-start)))
+    (loop for i below (expt phase-range phase-range)
        do
          (when (unique-values-p phase)
-           (let ((amps (setup-amplifier-chain program phase)))
-             (mapcar #'aoc-intcode:compute amps)
+           (let ((amps (setup-amplifier-chain program phase :feedback feedback)))
+             (loop until (all-amps-done amps) do
+                  (loop for amp across amps do
+                       (aoc-intcode:compute amp)))
              (push (cons (copy-seq phase) (amps-output amps))
                    outputs)))
-         (inc-phase phase))
+         (inc-digits phase phase-start phase-end))
     (sort outputs #'< :key #'cdr)))
+
+
+(compute-best-amplifier-configuration *program* 0 5) ; part 1
+(compute-best-amplifier-configuration *program* 5 9 :feedback T) ; part 2
