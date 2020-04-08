@@ -1,4 +1,4 @@
-                                        ; (asdf:load-system "aoc19")
+;; (asdf:load-system "aoc19")
 
 (in-package :cl-user)
 (defpackage :aoc19-intcode
