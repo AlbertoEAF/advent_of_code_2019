@@ -124,20 +124,13 @@
 (defun instruction-opcode (instruction)
   (mod instruction 100))
 
-(defun length-integer (n)
-  "Log-base-10 + ceiling of an integer + fractional part gives the #digits."
-  (ceiling (log (+ n 0.1) 10)))
-
 (defun instruction-modes (instruction len)
   "Parses the instruction modes generating flags right-to-left,
    after ignoring the rightmost 2 digits and generating always
    up to len elements t/nil."
-  (loop
-     for i = len then (1- i)
-     for mode-number = (floor (/ instruction 100)) then (floor
-                                                         (/ mode-number 10))
-     while (plusp i)
-     collect (= 1 (mod mode-number 10))))
+  (loop for _n-steps_ below len
+     for digits = (truncate instruction 100) then (truncate digits 10)
+     collect (mod digits 10)))
 
 (defun fetch-value (mem pc)
   (mem/r mem pc))
@@ -151,16 +144,21 @@
   "Given that write operations are effectively performed as if in
   immediate mode, even if in the instructions it says it'll never
   be specified like that, we 'override' that choice in case
-  it is an output arg."
+  it is an output arg.
+  Parameter modes:
+  0: position mode - position (in memory). 50 => value=(read @50)
+  1: immediate mode - value. 50 => 50
+  2: relative mode - ?
+  "
   (let* ((n-args (op-n-args op))
          (modes  (instruction-modes instruction n-args))
          (output-arg (op-output-arg op))
          (param-values (loop
-                          for immediate-mode-p in modes
-                          for arg-idx below n-args
-                          collect (if (or immediate-mode-p (= arg-idx output-arg))
-                                      (fetch-value mem (+ arg-idx pc 1))
-                                      (fetch-addr  mem (+ arg-idx pc 1))))))
+                          for mode in modes
+                          for arg-idx = 1 then (1+ arg-idx)
+                          collect (if (or (= 1 mode) (= arg-idx output-arg))
+                                      (fetch-value mem (+ arg-idx pc))
+                                      (fetch-addr  mem (+ arg-idx pc))))))
     (format *debug-stream* "~%parse-op-params: ~A -> op(~A) mode: ~A w/=~A -> ~A"
             (subseq mem pc (+ pc 1 n-args))
             (op-op-name op)
@@ -192,9 +190,9 @@
   (:documentation "Holds an intcode program state."))
 
 (defun compile-program (program-memory)
-  "Compile a program-state object"
+  "Compile a program-state object. Allocates +10k zeros (day9)."
   (make-instance 'program-state
-                 :program-memory (make-array (length program-memory)
+                 :program-memory (make-array (+ (length program-memory) 10000)
                                              :initial-contents program-memory)))
 
 (defmethod is-done ((program-state program-state))
@@ -213,7 +211,6 @@
          (op-output (apply (op-fn op) (append args ; If needed pass extra-args.
                                               (if (op-requires-inputs op)
                                                   (list :$inputs inputs))))))
-    ;; (concatenate 'list args (list :mem program-memory)))))
     (format debug-stream " ->> ~S >>> ~A~%"
             (cons opcode args) op-output)
     (values op-output pc-increment args op)))
@@ -240,6 +237,13 @@
 
     (return-from exec-op-output nil))) ; signal continuation
 
+(defun exec-pc-and-halt (program-state &key debug-stream)
+  "Runs a single op and signals termination with T/nil."
+  (with-slots (pc inputs program-memory) program-state
+    (multiple-value-bind (op-output pc-increment)
+        (compute-op-output program-memory pc inputs :debug-stream debug-stream)
+      (exec-op-output program-state op-output pc-increment))))
+
 
 (defmethod compute ((program-state program-state) &key debug-stream)
   "If debug-stream is nil, no prints will be performed
@@ -250,16 +254,9 @@
     :PAUSE - halt execution
     :EXIT - finish program (sets pc to nil)
     :JUMP - manipulate pc"
-  (with-slots (program-memory inputs outputs pc) program-state
+  (with-slots (program-memory outputs pc) program-state
     (format debug-stream "~%~%Executing program ~A with size ~A (pc=~s).~%~%"
             program-memory (length program-memory) pc)
-    (loop
-       until (is-done program-state)
-       do
-         (multiple-value-bind (op-output pc-increment)
-             (compute-op-output program-memory pc inputs :debug-stream debug-stream)
-           (when (exec-op-output program-state op-output pc-increment)
-             (loop-finish)))
-       finally
-         (format debug-stream "Computed: ~A~%" outputs)
-         (return outputs))))
+    (loop until (or (is-done program-state)
+                    (exec-pc-and-halt program-state :debug-stream debug-stream)))
+    outputs))

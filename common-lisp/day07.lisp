@@ -80,5 +80,5 @@
     (sort outputs #'< :key #'cdr)))
 
 
-(compute-best-amplifier-configuration *program* 0 5) ; part 1
-(compute-best-amplifier-configuration *program* 5 10 :feedback T) ; part 2
+(compute-best-amplifier-configuration *program* 0 5) ; part 1 (38500)
+(compute-best-amplifier-configuration *program* 5 10 :feedback T) ; part 2 (33660560)

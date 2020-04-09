@@ -4,11 +4,7 @@
                              "alexandria")
   :components ((:file "aoc19-utils")
                (:file "intcode")
-               (:file "day05")
-               (:file "day06-part1")
-               (:file "day07")
-               (:file "day08")))
-
+               (:file "day05")))
 
 (defsystem "aoc19/tests"
   :depends-on ("aoc19" "rove")

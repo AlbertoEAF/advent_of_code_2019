@@ -46,3 +46,10 @@
         (when (funcall test current-key best-key)
           (setf best current
                 best-key current-key))))))
+
+(defun digits (number)
+  (loop
+     for n = number then rest
+     for (rest digit) = (multiple-value-list (truncate n 10))
+     collecting digit
+     until (zerop rest)))
