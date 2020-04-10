@@ -1,24 +1,84 @@
-* with initial implementation (74d13ae43d1e80ec877cc43cb34efefa57b02914)
+* Two benchmarks - from impossibly slow to under 2s
+** Slow - initial implementation (74d13a)
 
-  seconds  |     gc     |     consed     |   calls   |  sec/call  |  name  
-----------------------------------------------------------------
-   239.947 |      4.743 | 67,606,230,800 |   362,416 |   0.000662 | AOC19-INTCODE::COMPUTE-OP-OUTPUT
-     0.081 |      0.000 |     14,188,544 |   362,415 |   0.000000 | AOC19-INTCODE::PARSE-OP-PARAMS
-     0.066 |      0.000 |              0 |   362,415 |   0.000000 | AOC19-INTCODE::FETCH-OP
-     0.041 |      0.000 |         32,768 |   362,416 |   0.000000 | AOC19-INTCODE::IS-DONE
-     0.034 |      0.000 |              0 |   362,415 |   0.000000 | AOC19-INTCODE::EXEC-OP-OUTPUT
-     0.030 |      0.000 |              0 |   362,415 |   0.000000 | AOC19-INTCODE::INSTRUCTION-OPCODE
-     0.028 |      0.000 |     15,794,176 |   362,415 |   0.000000 | AOC19-INTCODE::INSTRUCTION-MODES
-     0.013 |      0.000 |              0 |   163,094 |   0.000000 | AOC19-INTCODE::MEM/W
-     0.009 |      0.000 |              0 |   362,415 |   0.000000 | AOC19-INTCODE::OPS
-     0.001 |      0.000 |              0 |    72,482 |   0.000000 | AOC19-INTCODE::RELATIVE-BASE
-     0.001 |      0.000 |         32,720 |    72,482 |   0.000000 | (SETF AOC19-INTCODE::RELATIVE-BASE)
-     0.000 |      0.000 |              0 |   362,416 |   0.000000 | AOC19-INTCODE::EXEC-PC-AND-HALT
-     0.000 |      0.000 |              0 | 1,395,297 |   0.000000 | AOC19-INTCODE::MEM/R
-     0.000 |      0.000 |         36,640 |         1 |   0.000000 | COMPILE-PROGRAM
-     0.000 |      0.000 |              0 |         1 |   0.000000 | COMPUTE
-     0.000 |      0.000 |        119,632 |         1 |   0.000000 | READ-INTCODE-PROGRAM
-----------------------------------------------------------------
-   240.253 |      4.743 | 67,636,435,280 | 4,965,096 |            | Total
+   seconds  |     gc     |     consed     |   calls   |  sec/call  |  name
+ ----------------------------------------------------------------
+    239.947 |      4.743 | 67,606,230,800 |   362,416 |   0.000662 | AOC19-INTCODE::COMPUTE-OP-OUTPUT
+      0.081 |      0.000 |     14,188,544 |   362,415 |   0.000000 | AOC19-INTCODE::PARSE-OP-PARAMS
+      0.066 |      0.000 |              0 |   362,415 |   0.000000 | AOC19-INTCODE::FETCH-OP
+      0.041 |      0.000 |         32,768 |   362,416 |   0.000000 | AOC19-INTCODE::IS-DONE
+      0.034 |      0.000 |              0 |   362,415 |   0.000000 | AOC19-INTCODE::EXEC-OP-OUTPUT
+      0.030 |      0.000 |              0 |   362,415 |   0.000000 | AOC19-INTCODE::INSTRUCTION-OPCODE
+      0.028 |      0.000 |     15,794,176 |   362,415 |   0.000000 | AOC19-INTCODE::INSTRUCTION-MODES
+      0.013 |      0.000 |              0 |   163,094 |   0.000000 | AOC19-INTCODE::MEM/W
+      0.009 |      0.000 |              0 |   362,415 |   0.000000 | AOC19-INTCODE::OPS
+      0.001 |      0.000 |              0 |    72,482 |   0.000000 | AOC19-INTCODE::RELATIVE-BASE
+      0.001 |      0.000 |         32,720 |    72,482 |   0.000000 | (SETF AOC19-INTCODE::RELATIVE-BASE)
+      0.000 |      0.000 |              0 |   362,416 |   0.000000 | AOC19-INTCODE::EXEC-PC-AND-HALT
+      0.000 |      0.000 |              0 | 1,395,297 |   0.000000 | AOC19-INTCODE::MEM/R
+      0.000 |      0.000 |         36,640 |         1 |   0.000000 | COMPILE-PROGRAM
+      0.000 |      0.000 |              0 |         1 |   0.000000 | COMPUTE
+      0.000 |      0.000 |        119,632 |         1 |   0.000000 | READ-INTCODE-PROGRAM
+ ----------------------------------------------------------------
+    240.253 |      4.743 | 67,636,435,280 | 4,965,096 |            | Total
 
-* removing debugging string (add if) ()
+ [Status] (waiting and does not finish!!!!)
+
+** Fast - create debug stream inside (when) (b37797d)
+
+   seconds  |     gc     |   consed   |   calls   |  sec/call  |  name
+ ------------------------------------------------------------
+      0.103 |      0.000 | 18,612,224 |   371,206 |   0.000000 | AOC19-INTCODE::PARSE-OP-PARAMS
+      0.041 |      0.005 | 20,545,536 |   371,206 |   0.000000 | AOC19-INTCODE::INSTRUCTION-MODES
+      0.027 |      0.000 |          0 |   371,206 |   0.000000 | AOC19-INTCODE::FETCH-OP
+      0.022 |      0.000 |          0 |   371,206 |   0.000000 | AOC19-INTCODE::EXEC-OP-OUTPUT
+      0.012 |      0.000 |          0 |   167,042 |   0.000000 | AOC19-INTCODE::MEM/W
+      0.010 |      0.000 |          0 |   371,206 |   0.000000 | AOC19-INTCODE::IS-DONE
+      0.008 |      0.000 |          0 |   371,206 |   0.000000 | AOC19-INTCODE::OPS
+      0.002 |      0.000 |          0 |    74,243 |   0.000000 | (SETF AOC19-INTCODE::RELATIVE-BASE)
+      0.001 |      0.000 |     20,912 |         1 |   0.000999 | COMPILE-PROGRAM
+      0.000 |      0.000 |          0 |   371,206 |   0.000000 | AOC19-INTCODE::EXEC-PC-AND-HALT
+      0.000 |      0.000 |          0 |   371,206 |   0.000000 | AOC19-INTCODE::INSTRUCTION-OPCODE
+      0.000 |      0.000 |          0 |    74,243 |   0.000000 | AOC19-INTCODE::RELATIVE-BASE
+      0.000 |      0.000 |          0 | 1,429,136 |   0.000000 | AOC19-INTCODE::MEM/R
+      0.000 |      0.003 | 26,766,464 |   371,206 |   0.000000 | AOC19-INTCODE::COMPUTE-OP-OUTPUT
+      0.000 |      0.000 |    885,552 |         1 |   0.000000 | COMPUTE
+ ------------------------------------------------------------
+      0.227 |      0.008 | 66,830,688 | 5,085,520 |            | Total
+
+ estimated total profiling overhead: 7.54 seconds
+ overhead estimation parameters:
+   6.0e-9s/call, 1.482e-6s total profiling, 7.3e-7s internal profiling
+
+ Evaluation took:
+   9.220 seconds of real time
+   7.899584 seconds of total run time (3.762396 user, 4.137188 system)
+   [ Run times consist of 0.004 seconds GC time, and 7.896 seconds non-GC time. ]
+   85.68% CPU
+   26,776,658,484 processor cycles
+   66,820,016 bytes consed
+
+
+ with profiling!
+
+*** now without profiling:
+
+ Evaluation took:
+   1.370 seconds of real time
+   0.132880 seconds of total run time (0.132880 user, 0.000000 system)
+   [ Run times consist of 0.004 seconds GC time, and 0.129 seconds non-GC time. ]
+   9.71% CPU
+   3,979,449,260 processor cycles
+   66,883,200 bytes consed
+
+
+** Conclusion:
+
+ - Just formatting a string that was not seen for debugging (stream=nil) made the
+   program take a projected execution time of from 246s (with profiling) to ~9s
+
+ - With profiling, it went from 1510 ops/s to 3603941.8 ops/s!
+
+ - Without profiling, it went from that to 1.4s!
+
+* Optimizing #cons?
