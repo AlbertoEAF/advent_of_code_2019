@@ -40,7 +40,7 @@
 (let ((*mock-input* 1))
   (compute (compile-program '(3 9 8 9 10 9 4 9 99 -1 8) :with-ops *mock-ops*)))
 
-(deftest input-comparison-programs
+(deftest day5/input-comparison-programs
   (testing "input = 8 (position mode)"
     (setf *s* '(3 9 8 9 10 9 4 9 99 -1 8))
     (q= 0 7)
@@ -66,3 +66,24 @@
     (q= 1 7)
     (q= 0 8)
     (q= 0 9)))
+
+
+;; day 9 tests
+
+(defun get-queue-values (q)
+  (loop for x = (qpop q) while x collecting x))
+
+(deftest day9
+  (testing "test program 1"
+    (let* ((d9-p1-source (list 109 1 204 -1 1001 100 1 100 1008 100 16 101 1006 101 0 99))
+           (p1 (compile-program d9-p1-source :ram-size 200)))
+      (ok (equal d9-p1-source (get-queue-values (compute p1))))))
+               
+  (testing "test program 2"
+    (ok (= 16
+           (length (digits (qtop (compute (compile-program '(1102 34915192 34915192 7 4 7 99 0)))))))))
+
+  (testing "test program 3"
+    (let ((*s* '(104 1125899906842624 99)))
+      (q= (second *s*) :any-input))))
+

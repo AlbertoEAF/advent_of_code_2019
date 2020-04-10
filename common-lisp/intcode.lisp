@@ -160,8 +160,9 @@
            (param-value (mode is-output pos)
              (let ((pos-value (mem/r mem pos)))
                (if (= mode 1) pos-value
-                   (with-relative-offset mode (if is-output pos-value
-                                                  (mem/r mem pos-value)))))))
+                   (let ((pos-value (with-relative-offset mode pos-value)))
+                     (if is-output pos-value
+                         (mem/r mem pos-value)))))))
     (let* ((param-values (loop
                             for mode in (instruction-modes instruction (op-n-args op))
                             for arg-idx = 0 then (1+ arg-idx)

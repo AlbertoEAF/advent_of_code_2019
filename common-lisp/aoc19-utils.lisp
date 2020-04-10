@@ -7,7 +7,8 @@
            #:hash-keys
            #:has-key
            #:get-function-mandatory-arguments-count
-           #:find-best))
+           #:find-best
+           #:digits))
 (in-package :aoc19-utils)
 
 

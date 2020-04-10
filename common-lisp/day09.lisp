@@ -2,12 +2,15 @@
 (defpackage :aoc19-d9
   (:use :cl
         :aoc19-utils
-        :queues
-        :log4cl
-        :array-operations))
+        :aoc19-intcode
+        :queues))
 (in-package :aoc19-d9)
-(require 'alexandria)
 
-(readable:enable-sweet)
+(defparameter *program-mem* (read-intcode-program "day09.txt"))
+
+(compute (compile-program *program-mem*))
+
+
+
 
 
