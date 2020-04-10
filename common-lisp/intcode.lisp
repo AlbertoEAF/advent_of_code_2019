@@ -248,7 +248,7 @@
       (when debug-stream
         (format debug-stream " ->> ~S >>> ~A~%"
                 (cons opcode args) op-output))
-      (values op-output pc-increment args op))))
+      (values op-output pc-increment))))
 
 (defun exec-op-output (program-state op-output pc-increment)
   "Applies the output of the operation to move the program interpreter state."
