@@ -166,8 +166,6 @@
     (let* ((param-values (loop
                             for mode in (instruction-modes instruction (op-n-args op))
                             for arg-idx = 0 then (1+ arg-idx)
-                            ;; big computational performance regression here?!!
-                            do  (log:debug (op-op-name op) mode arg-idx)
                             collect (param-value mode (= arg-idx (op-out-arg-idx op))
                                                  (+ pc 1 arg-idx)))))
       (when debug-stream
