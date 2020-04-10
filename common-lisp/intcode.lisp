@@ -19,6 +19,9 @@
    #:outputs))
 (in-package :aoc19-intcode)
 
+(require :queues.simple-queue)
+
+
 (cl-interpol:enable-interpol-syntax)
 
 (defun read-intcode-program (filepath)
@@ -138,9 +141,7 @@
 (defun fetch-addr (mem pc)
   (fetch-value mem (fetch-value mem pc)))
 
-(defparameter *debug-stream* nil)
-
-(defun parse-op-params (mem pc instruction op)
+(defun parse-op-params (mem pc instruction op relative-base debug-stream)
   "Given that write operations are effectively performed as if in
   immediate mode, even if in the instructions it says it'll never
   be specified like that, we 'override' that choice in case
@@ -148,18 +149,21 @@
   Parameter modes:
   0: position mode - position (in memory). 50 => value=(read @50)
   1: immediate mode - value. 50 => 50
-  2: relative mode - ?
+  2: relative mode - same as position but with relative base offset (starting at 0)
   "
   (let* ((n-args (op-n-args op))
          (modes  (instruction-modes instruction n-args))
          (output-arg (op-output-arg op))
          (param-values (loop
                           for mode in modes
-                          for arg-idx = 1 then (1+ arg-idx)
-                          collect (if (or (= 1 mode) (= arg-idx output-arg))
-                                      (fetch-value mem (+ arg-idx pc))
-                                      (fetch-addr  mem (+ arg-idx pc))))))
-    (format *debug-stream* "~%parse-op-params: ~A -> op(~A) mode: ~A w/=~A -> ~A"
+                          for arg-idx = 0 then (1+ arg-idx)
+                          ;; big computational performance regression here?!!
+                          collect (if (and (/= 1 mode) (/= arg-idx output-arg))
+                                      (fetch-addr  mem (+ arg-idx pc 1))
+                                      (+ (fetch-value mem (+ arg-idx pc 1))
+                                         (if (= 2 mode) relative-base 0))))))
+
+    (format debug-stream "~%parse-op-params: ~A -> op(~A) mode: ~A w/=~A -> ~A"
             (subseq mem pc (+ pc 1 n-args))
             (op-op-name op)
             modes
@@ -171,9 +175,19 @@
 
 
 (defclass program-state ()
-  ((program-memory
-    :initarg :program-memory
-    :accessor program-memory)
+  ((ram
+    :initarg :ram
+    :accessor ram)
+   (pc
+    :documentation "Program counter. nil when execution finishes."
+    :initarg :pc
+    :accessor pc
+    :initform 0)
+   (relative-base
+    :documentation "Store relative offset for relative parameter mode (2)."
+    :initarg :relative-base
+    :accessor relative-base
+    :initform 0)
    (inputs
     :initarg :inputs
     :accessor inputs
@@ -182,42 +196,44 @@
     :initarg :outputs
     :accessor outputs
     :initform (queues:make-queue :simple-queue))
-   (pc
-    :documentation "Program counter. nil when execution finishes."
-    :initarg :pc
-    :accessor pc
-    :initform 0))
+   (debug-stream
+    :documentation "For debugging purposes. Set to T to print logs to *standard-output*."
+    :initarg :debug-stream
+    :accessor debug-stream
+    :initform nil))
   (:documentation "Holds an intcode program state."))
 
-(defun compile-program (program-memory)
-  "Compile a program-state object. Allocates +10k zeros (day9)."
+(defun compile-program (ram &key (ram-size 10000) debug-stream)
+  "Compile a program-state object."
   (make-instance 'program-state
-                 :program-memory (make-array (+ (length program-memory) 10000)
-                                             :initial-contents program-memory)))
+                 :ram (adjust-array (make-array (length ram) :initial-contents ram)
+                                    (max (length ram) (or ram-size 0)))
+                 :debug-stream debug-stream))
 
 (defmethod is-done ((program-state program-state))
-  (with-slots (pc program-memory) program-state
+  (with-slots (pc ram) program-state
     (or (null pc)
-        (= pc (length program-memory)))))
+        (= pc (length ram)))))
 
-(defun compute-op-output (program-memory pc inputs &key debug-stream)
+(defun compute-op-output (program)
   "Computes the output of calling op."
-  (format debug-stream "Program Memory: ~a~%" program-memory)
-  (let* ((instruction (mem/r program-memory pc))
-         (opcode (instruction-opcode instruction))
-         (op     (fetch-op opcode))
-         (args   (parse-op-params program-memory pc instruction op))
-         (pc-increment (1+ (op-n-args op))) ; Adds 1 for the opcode.
-         (op-output (apply (op-fn op) (append args ; If needed pass extra-args.
-                                              (if (op-requires-inputs op)
-                                                  (list :$inputs inputs))))))
-    (format debug-stream " ->> ~S >>> ~A~%"
-            (cons opcode args) op-output)
-    (values op-output pc-increment args op)))
+  (with-slots (ram pc relative-base inputs debug-stream) program
+      (format debug-stream "Program Memory: ~a~%" ram)
+    (let* ((instruction (mem/r ram pc))
+           (opcode (instruction-opcode instruction))
+           (op     (fetch-op opcode))
+           (args   (parse-op-params ram pc instruction op relative-base debug-stream))
+           (pc-increment (1+ (op-n-args op)))      ; Adds 1 for the opcode.
+           (op-output (apply (op-fn op) (append args ; If needed pass extra-args.
+                                                (if (op-requires-inputs op)
+                                                    (list :$inputs inputs))))))
+      (format debug-stream " ->> ~S >>> ~A~%"
+              (cons opcode args) op-output)
+      (values op-output pc-increment args op))))
 
 (defun exec-op-output (program-state op-output pc-increment)
   "Applies the output of the operation to move the program interpreter state."
-  (with-slots (program-memory inputs outputs pc) program-state
+  (with-slots (ram inputs outputs pc) program-state
     (incf pc pc-increment)
     (when op-output
       (destructuring-bind (cmd &rest args) op-output
@@ -225,7 +241,7 @@
           ;; non-halting commands
           (:OUTPUT (qpush outputs (first args)))
           (:WRITE (destructuring-bind (write-address write-value) args
-                    (mem/w program-memory write-address write-value)))
+                    (mem/w ram write-address write-value)))
           (:JUMP (setf pc (first args)))
 
           ;; all halting commands.
@@ -237,15 +253,13 @@
 
     (return-from exec-op-output nil))) ; signal continuation
 
-(defun exec-pc-and-halt (program-state &key debug-stream)
-  "Runs a single op and signals termination with T/nil."
-  (with-slots (pc inputs program-memory) program-state
-    (multiple-value-bind (op-output pc-increment)
-        (compute-op-output program-memory pc inputs :debug-stream debug-stream)
-      (exec-op-output program-state op-output pc-increment))))
+(defun exec-pc-and-halt (program-state)
+  "Runs a single op and signals termination with T. Returns nil otherwise."
+  (multiple-value-bind (op-output pc-increment) (compute-op-output program-state)
+    (exec-op-output program-state op-output pc-increment)))
 
 
-(defmethod compute ((program-state program-state) &key debug-stream)
+(defmethod compute ((program program-state))
   "If debug-stream is nil, no prints will be performed
    Special keywords are:
     :WRITE - write at memory address a particular value
@@ -254,9 +268,9 @@
     :PAUSE - halt execution
     :EXIT - finish program (sets pc to nil)
     :JUMP - manipulate pc"
-  (with-slots (program-memory outputs pc) program-state
+  (with-slots (ram outputs pc debug-stream) program
     (format debug-stream "~%~%Executing program ~A with size ~A (pc=~s).~%~%"
-            program-memory (length program-memory) pc)
-    (loop until (or (is-done program-state)
-                    (exec-pc-and-halt program-state :debug-stream debug-stream)))
+            ram (length ram) pc)
+    (loop until (or (is-done program)
+                    (exec-pc-and-halt program)))
     outputs))

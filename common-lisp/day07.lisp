@@ -7,7 +7,6 @@
         :queues))
 (in-package :aoc19-d7)
 
-(require :queues.simple-queue)
 
 
                                         ; Program start
