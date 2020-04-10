@@ -14,11 +14,10 @@
 (defparameter *program* (read-intcode-program "day7.txt"))
 
 (register-op 3 "op-3-input-op-phase-or-input"
-             (lambda ($out &key $inputs)
-               (let ((value (qpop $inputs)))
+             (lambda ($out &key $program)
+               (let ((value (qpop (inputs $program))))
                  (if value (list :WRITE $out value)
                      (list :REWIND-OP-AND-PAUSE)))))
-
 
 (defun inc-digits (array start end)
   "Expands logic of incrementing a binary number's digits to any integer base and offset."
@@ -47,7 +46,7 @@
   (let ((amps (make-array 5)))
     (dotimes (i 5)
       ;; Initialize single amplifier with phase
-      (setf (elt amps i) (compile-program program-memory))
+      (setf (elt amps i) (compile-program program-memory :ram-size 0))
       (set-amp-phase (elt amps i) (elt phase i))
       ;; assign outputs of prev to next program's inputs
       (when (plusp i)
@@ -78,6 +77,6 @@
       (inc-digits phase phase-start phase-end))
     (sort outputs #'< :key #'cdr)))
 
-
-(compute-best-amplifier-configuration *program* 0 5) ; part 1 (38500)
-(compute-best-amplifier-configuration *program* 5 10 :feedback T) ; part 2 (33660560)
+(defun benchmarks ()
+  (compute-best-amplifier-configuration *program* 0 5) ; part 1 (38500)
+  (compute-best-amplifier-configuration *program* 5 10 :feedback T)) ; part 2 (33660560)

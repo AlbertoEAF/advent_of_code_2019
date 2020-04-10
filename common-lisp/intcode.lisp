@@ -9,12 +9,11 @@
         :queues)
   (:nicknames aoc-intcode)
   (:export
+   #:read-intcode-program
+   #:def-op
+   #:register-op
    #:compile-program
    #:compute
-   #:register-op
-   #:read-intcode-program
-   #:mem/r
-   #:mem/w
    #:inputs
    #:outputs))
 (in-package :aoc19-intcode)
@@ -31,50 +30,56 @@
     (split-to-integers (uiop:read-file-string filepath))))
 
 
-(defparameter *ops* (make-hash-table)
+(defparameter *default-ops* (make-hash-table)
   "Stores the possible ops")
 
 (defstruct op
-  "output-arg will serve to override program-mode -> immediate mode for any   write argument."
+  "out-arg-idx will serve to override program-mode -> immediate mode for any write argument
+   (so it works like a place and not the value at that place later on the :WRITE)."
   opcode
   n-args
   fn
-  output-arg
+  out-arg-idx
   op-name
   requires-inputs)
 
-(defun get-output-arg (fn)
- "Retrieves the output argument position."
- (position '$OUT (arg:arglist fn) :test #'string=))
 
-(defun fn-requires-inputs (fn)
-  "If it has a key argument called inputs"
-  (let* ((args (arg:arglist fn)))
-    (position '$inputs args
-              :test #'string=
-              :start (or (position '&key args)
-                         (length args)))))
-
+(defun def-op (opcode op-name fn)
+  "The function can take as many arguments as needed, but:
+   - $out is handled specially (interpreted as output address argument)
+   - &key $program (optionally, if defined, the program itself will be passed in).
+  "
+  (labels ((get-out-arg-idx (fn)
+             "Retrieves the output argument position."
+             (position '$OUT (arg:arglist fn) :test #'string=))
+           (fn-requires-inputs (fn)
+             "If it has a key argument called inputs"
+             (let* ((args (arg:arglist fn)))
+               (position '$program args
+                         :test #'string=
+                         :start (or (position '&key args)
+                                    (length args))))))
+    (make-op :opcode opcode
+             :n-args (aoc19-utils:get-function-mandatory-arguments-count fn)
+             :fn fn
+             :out-arg-idx (or (get-out-arg-idx fn) -1) ;; needs to be numerical
+             :op-name op-name
+             :requires-inputs (fn-requires-inputs fn))))
 
 (defun register-op (opcode op-name fn)
   "The function can take as many arguments as needed, but:
    - $out is handled specially (interpreted as output address argument)
-   - &key $inputs (optionally, if defined, the program inputs will be passed in).
+   - &key $program (optionally, if defined, the program itself will be passed in).
   "
-  (setf (gethash opcode *ops*)
-        (make-op :opcode opcode
-                 :n-args (aoc19-utils:get-function-mandatory-arguments-count fn)
-                 :fn fn
-                 :output-arg (or (get-output-arg fn) -1) ;; needs to be numerical
-                 :op-name op-name
-                 :requires-inputs (fn-requires-inputs fn))))
+  (setf (gethash opcode *default-ops*)
+        (def-op opcode op-name fn)))
 
 (defun mem/r (memory address)
-  (elt memory address))
+  (aref memory address))
 
 (defun mem/w (memory address value)
   "Writes the value to memory at address. Returns nil."
-  (setf (elt memory address) value)
+  (setf (aref memory address) value)
   nil)
 
 (register-op 1 "+"
@@ -114,12 +119,17 @@
              (lambda (a b $out)
                (list :WRITE $out (if (= a b) 1 0))))
 
+(register-op 9 "relative-base offset"
+             (lambda (add-relative-base-adjust-offset &key $program)
+               (incf (relative-base $program) add-relative-base-adjust-offset)
+               nil))
+
 (register-op 99 "exit"
              (lambda ()
                (list :EXIT)))
 
-(defun fetch-op (opcode)
-  (let ((op (gethash opcode *ops*)))
+(defun fetch-op (program opcode)
+  (let ((op (gethash opcode (ops program))))
     (if (null op)
         (error (format nil "Invalid/Unknown Opcode (~A)!" opcode))
         op)))
@@ -135,41 +145,38 @@
      for digits = (truncate instruction 100) then (truncate digits 10)
      collect (mod digits 10)))
 
-(defun fetch-value (mem pc)
-  (mem/r mem pc))
-
-(defun fetch-addr (mem pc)
-  (fetch-value mem (fetch-value mem pc)))
-
 (defun parse-op-params (mem pc instruction op relative-base debug-stream)
   "Given that write operations are effectively performed as if in
   immediate mode, even if in the instructions it says it'll never
   be specified like that, we 'override' that choice in case
   it is an output arg.
   Parameter modes:
-  0: position mode - position (in memory). 50 => value=(read @50)
+  0: position mode - position (in memory). 50 => value=(read @50) || (write @50)
   1: immediate mode - value. 50 => 50
   2: relative mode - same as position but with relative base offset (starting at 0)
   "
-  (let* ((n-args (op-n-args op))
-         (modes  (instruction-modes instruction n-args))
-         (output-arg (op-output-arg op))
-         (param-values (loop
-                          for mode in modes
-                          for arg-idx = 0 then (1+ arg-idx)
-                          ;; big computational performance regression here?!!
-                          collect (if (and (/= 1 mode) (/= arg-idx output-arg))
-                                      (fetch-addr  mem (+ arg-idx pc 1))
-                                      (+ (fetch-value mem (+ arg-idx pc 1))
-                                         (if (= 2 mode) relative-base 0))))))
-
-    (format debug-stream "~%parse-op-params: ~A -> op(~A) mode: ~A w/=~A -> ~A"
-            (subseq mem pc (+ pc 1 n-args))
-            (op-op-name op)
-            modes
-            output-arg
-            param-values)
-    param-values))
+  (labels ((with-relative-offset (mode value) (if (= mode 2) (+ value relative-base)
+                                                  value))
+           (param-value (mode is-output pos)
+             (let ((pos-value (mem/r mem pos)))
+               (if (= mode 1) pos-value
+                   (with-relative-offset mode (if is-output pos-value
+                                                  (mem/r mem pos-value)))))))
+    (let* ((param-values (loop
+                            for mode in (instruction-modes instruction (op-n-args op))
+                            for arg-idx = 0 then (1+ arg-idx)
+                            ;; big computational performance regression here?!!
+                            do  (log:debug (op-op-name op) mode arg-idx)
+                            collect (param-value mode (= arg-idx (op-out-arg-idx op))
+                                                 (+ pc 1 arg-idx)))))
+      (when debug-stream
+        (format debug-stream "~%parse-op-params: ~A -> op(~A) mode: ~A w/=~A -> ~A"
+                (subseq mem pc (+ pc 1 (op-n-args op)))
+                (op-op-name op)
+                (instruction-modes instruction (op-n-args op))
+                (op-out-arg-idx op)
+                param-values))
+      param-values)))
 
 
 
@@ -196,6 +203,11 @@
     :initarg :outputs
     :accessor outputs
     :initform (queues:make-queue :simple-queue))
+   (ops
+    :documentation "Stores the operations used for this intcode machine."
+    :initarg :ops
+    :accessor ops
+    :initform *default-ops*)
    (debug-stream
     :documentation "For debugging purposes. Set to T to print logs to *standard-output*."
     :initarg :debug-stream
@@ -203,12 +215,16 @@
     :initform nil))
   (:documentation "Holds an intcode program state."))
 
-(defun compile-program (ram &key (ram-size 10000) debug-stream)
+(defun compile-program (ram &key (ram-size 10000) debug-stream with-ops)
   "Compile a program-state object."
   (make-instance 'program-state
                  :ram (adjust-array (make-array (length ram) :initial-contents ram)
                                     (max (length ram) (or ram-size 0)))
-                 :debug-stream debug-stream))
+                 :debug-stream debug-stream
+                 :ops (if with-ops (loop with new-ops = (alexandria:copy-hash-table *default-ops*)
+                                      for op in with-ops do (setf (gethash (op-opcode op) new-ops) op)
+                                      finally (return new-ops))
+                          *default-ops*)))
 
 (defmethod is-done ((program-state program-state))
   (with-slots (pc ram) program-state
@@ -221,14 +237,15 @@
       (format debug-stream "Program Memory: ~a~%" ram)
     (let* ((instruction (mem/r ram pc))
            (opcode (instruction-opcode instruction))
-           (op     (fetch-op opcode))
+           (op     (fetch-op program opcode))
            (args   (parse-op-params ram pc instruction op relative-base debug-stream))
            (pc-increment (1+ (op-n-args op)))      ; Adds 1 for the opcode.
            (op-output (apply (op-fn op) (append args ; If needed pass extra-args.
                                                 (if (op-requires-inputs op)
-                                                    (list :$inputs inputs))))))
-      (format debug-stream " ->> ~S >>> ~A~%"
-              (cons opcode args) op-output)
+                                                    (list :$program program))))))
+      (when debug-stream
+        (format debug-stream " ->> ~S >>> ~A~%"
+                (cons opcode args) op-output))
       (values op-output pc-increment args op))))
 
 (defun exec-op-output (program-state op-output pc-increment)

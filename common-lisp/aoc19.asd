@@ -8,4 +8,5 @@
 
 (defsystem "aoc19/tests"
   :depends-on ("aoc19" "rove")
-  :components ((:file "day05-tests")))
+  :components ((:file "day05-tests")
+               (:file "intcode-tests")))
