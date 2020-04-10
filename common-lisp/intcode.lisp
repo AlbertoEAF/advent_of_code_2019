@@ -235,7 +235,8 @@
 (defun compute-op-output (program)
   "Computes the output of calling op."
   (with-slots (ram pc relative-base inputs debug-stream) program
-      (format debug-stream "Program Memory: ~a~%" ram)
+    (when debug-stream
+      (format debug-stream "Program Memory: ~a~%" ram))
     (let* ((instruction (mem/r ram pc))
            (opcode (instruction-opcode instruction))
            (op     (fetch-op program opcode))

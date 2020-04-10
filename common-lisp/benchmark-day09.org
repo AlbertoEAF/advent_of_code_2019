@@ -1,0 +1,24 @@
+* with initial implementation (74d13ae43d1e80ec877cc43cb34efefa57b02914)
+
+  seconds  |     gc     |     consed     |   calls   |  sec/call  |  name  
+----------------------------------------------------------------
+   239.947 |      4.743 | 67,606,230,800 |   362,416 |   0.000662 | AOC19-INTCODE::COMPUTE-OP-OUTPUT
+     0.081 |      0.000 |     14,188,544 |   362,415 |   0.000000 | AOC19-INTCODE::PARSE-OP-PARAMS
+     0.066 |      0.000 |              0 |   362,415 |   0.000000 | AOC19-INTCODE::FETCH-OP
+     0.041 |      0.000 |         32,768 |   362,416 |   0.000000 | AOC19-INTCODE::IS-DONE
+     0.034 |      0.000 |              0 |   362,415 |   0.000000 | AOC19-INTCODE::EXEC-OP-OUTPUT
+     0.030 |      0.000 |              0 |   362,415 |   0.000000 | AOC19-INTCODE::INSTRUCTION-OPCODE
+     0.028 |      0.000 |     15,794,176 |   362,415 |   0.000000 | AOC19-INTCODE::INSTRUCTION-MODES
+     0.013 |      0.000 |              0 |   163,094 |   0.000000 | AOC19-INTCODE::MEM/W
+     0.009 |      0.000 |              0 |   362,415 |   0.000000 | AOC19-INTCODE::OPS
+     0.001 |      0.000 |              0 |    72,482 |   0.000000 | AOC19-INTCODE::RELATIVE-BASE
+     0.001 |      0.000 |         32,720 |    72,482 |   0.000000 | (SETF AOC19-INTCODE::RELATIVE-BASE)
+     0.000 |      0.000 |              0 |   362,416 |   0.000000 | AOC19-INTCODE::EXEC-PC-AND-HALT
+     0.000 |      0.000 |              0 | 1,395,297 |   0.000000 | AOC19-INTCODE::MEM/R
+     0.000 |      0.000 |         36,640 |         1 |   0.000000 | COMPILE-PROGRAM
+     0.000 |      0.000 |              0 |         1 |   0.000000 | COMPUTE
+     0.000 |      0.000 |        119,632 |         1 |   0.000000 | READ-INTCODE-PROGRAM
+----------------------------------------------------------------
+   240.253 |      4.743 | 67,636,435,280 | 4,965,096 |            | Total
+
+* removing debugging string (add if) ()
